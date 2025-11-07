@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liskord Chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #36393f;
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 20px;
+        }
+        
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #40444b;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #2f3136;
+        }
+        
+        .message {
+            padding: 8px 0;
+            border-bottom: 1px solid #40444b;
+        }
+        
+        .message-header {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+        
+        .message-author {
+            font-weight: bold;
+            color: #fff;
+        }
+        
+        .message-time {
+            color: #72767d;
+            font-size: 12px;
+        }
+        
+        .message-content {
+            color: #dcddde;
+        }
+        
+        .input-container {
+            display: flex;
+            gap: 10px;
+        }
+        
+        #messageInput {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: #40444b;
+            color: white;
+            font-size: 16px;
+        }
+        
+        #messageInput::placeholder {
+            color: #72767d;
+        }
+        
+        button {
+            padding: 12px 20px;
+            background: #5865f2;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        button:hover {
+            background: #4752c4;
+        }
+        
+        .login-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .login-form {
+            background: #2f3136;
+            padding: 30px;
+            border-radius: 8px;
+            width: 400px;
+            text-align: center;
+        }
+        
+        .login-form h2 {
+            margin-bottom: 20px;
+        }
+        
+        .login-form input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: none;
+            border-radius: 4px;
+            background: #40444b;
+            color: white;
+        }
+        
+        .users-online {
+            background: #2f3136;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <h1>💬 Liskord Chat</h1>
+        
+        <div class="users-online" id="usersOnline">
+            👥 Участники онлайн: <span id="onlineCount">1</span>
+        </div>
+        
+        <div class="messages" id="messagesContainer">
+            <!-- Сообщения загружаются здесь -->
+        </div>
+        
+        <div class="input-container">
+            <input type="text" id="messageInput" placeholder="Написать сообщение...">
+            <button onclick="sendMessage()">Отправить</button>
+        </div>
+    </div>
+
+    <div class="login-modal" id="loginModal">
+        <div class="login-form">
+            <h2>Вход в Liskord</h2>
+            <input type="text" id="usernameInput" placeholder="Ваше имя" maxlength="20">
+            <button onclick="login()">Войти в чат</button>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        let messages = JSON.parse(localStorage.getItem('liskord_messages')) || [];
+        let lastUpdate = localStorage.getItem('liskord_last_update') || 0;
+
+        // Загружаем сообщения при загрузке страницы
+        function loadMessages() {
+            const container = document.getElementById('messagesContainer');
+            container.innerHTML = '';
+            
+            messages.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message';
+                messageDiv.innerHTML = `
+                    <div class="message-header">
+                        <span class="message-author">${msg.author}</span>
+                        <span class="message-time">${formatTime(msg.timestamp)}</span>
+                    </div>
+                    <div class="message-content">${escapeHtml(msg.content)}</div>
+                `;
+                container.appendChild(messageDiv);
+            });
+            
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Отправка сообщения
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const content = input.value.trim();
+            
+            if (!content || !currentUser) return;
+            
+            const message = {
+                id: Date.now(),
+                author: currentUser,
+                content: content,
+                timestamp: new Date()
+            };
+            
+            messages.push(message);
+            
+            // Сохраняем в localStorage
+            localStorage.setItem('liskord_messages', JSON.stringify(messages));
+            localStorage.setItem('liskord_last_update', Date.now());
+            
+            input.value = '';
+            loadMessages();
+            
+            // Симулируем получение сообщения другим пользователем
+            setTimeout(checkForNewMessages, 1000);
+        }
+
+        // Проверка новых сообщений
+        function checkForNewMessages() {
+            const lastUpdateTime = parseInt(localStorage.getItem('liskord_last_update') || 0);
+            const currentLastUpdate = parseInt(localStorage.getItem('liskord_last_update') || 0);
+            
+            if (currentLastUpdate > lastUpdate) {
+                const newMessages = JSON.parse(localStorage.getItem('liskord_messages')) || [];
+                if (newMessages.length > messages.length) {
+                    messages = newMessages;
+                    loadMessages();
+                }
+            }
+        }
+
+        // Вход в систему
+        function login() {
+            const usernameInput = document.getElementById('usernameInput');
+            const username = usernameInput.value.trim();
+            
+            if (!username) return;
+            
+            currentUser = username;
+            document.getElementById('loginModal').style.display = 'none';
+            document.title = `Liskord - ${username}`;
+            
+            // Добавляем приветственное сообщение
+            if (messages.length === 0) {
+                messages.push({
+                    id: 'welcome',
+                    author: 'Система',
+                    content: `Добро пожаловать в Liskord, ${username}!`,
+                    timestamp: new Date()
+                });
+                localStorage.setItem('liskord_messages', JSON.stringify(messages));
+            }
+            
+            loadMessages();
+            
+            // Проверяем новые сообщения каждые 2 секунды
+            setInterval(checkForNewMessages, 2000);
+        }
+
+        // Вспомогательные функции
+        function formatTime(date) {
+            return new Date(date).toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Enter для отправки
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Загружаем сообщения при загрузке
+        window.addEventListener('load', function() {
+            loadMessages();
+            setInterval(checkForNewMessages, 2000);
+        });
+    </script>
+</body>
+</html>
